@@ -1,8 +1,6 @@
 name: Link Checker CI/CD
 
-# Когда запускается workflow
 on:
-  # 1. Запуск вручную из интерфейса GitHub
   workflow_dispatch:
     inputs:
       target_url:
@@ -13,21 +11,16 @@ on:
         description: 'Максимальное число ссылок'
         required: false
         default: '100'
-
-  # 2. По расписанию (каждый день в 8 утра по UTC)
   schedule:
     - cron: '0 8 * * *'
-
-  # 3. При каждом push или pull request в main ветку
   push:
     branches: [ main ]
   pull_request:
     branches: [ main ]
 
-# Переменные по умолчанию (если не переданы вручную)
 env:
-  DEFAULT_URL: "https:///www.google.com"
-  DEFAULT_MAX_LINKS: 30
+  DEFAULT_URL: "https://github.com"
+  DEFAULT_MAX_LINKS: 50
 
 jobs:
   check-links:
@@ -35,37 +28,30 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
-      # 1. Получаем код из репозитория
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2. Устанавливаем Python
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      # 3. Устанавливаем зависимости
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      # 4. Определяем параметры запуска
       - name: Determine run parameters
         id: params
         run: |
-          # Используем ручной ввод, если workflow запущен вручную
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "TARGET_URL=${{ github.event.inputs.target_url }}" >> $GITHUB_OUTPUT
             echo "MAX_LINKS=${{ github.event.inputs.max_links }}" >> $GITHUB_OUTPUT
           else
-            # Иначе используем переменные по умолчанию
             echo "TARGET_URL=$DEFAULT_URL" >> $GITHUB_OUTPUT
             echo "MAX_LINKS=$DEFAULT_MAX_LINKS" >> $GITHUB_OUTPUT
           fi
           
-      # 5. Запускаем проверку ссылок
       - name: Run link checker
         id: checker
         run: |
@@ -73,14 +59,12 @@ jobs:
           echo "URL: ${{ steps.params.outputs.TARGET_URL }}"
           echo "Макс. ссылок: ${{ steps.params.outputs.MAX_LINKS }}"
           
-          # Запускаем агента и сохраняем результаты в JSON
           python main.py \
             "${{ steps.params.outputs.TARGET_URL }}" \
             --max-links "${{ steps.params.outputs.MAX_LINKS }}" \
             --output results.json \
             --verbose
           
-          # Анализируем результаты для summary
           TOTAL_LINKS=$(python -c "import json; data=json.load(open('results.json')); print(len(data))")
           WORKING_LINKS=$(python -c "import json; data=json.load(open('results.json')); print(sum(1 for r in data if r['ok']))")
           BROKEN_LINKS=$(python -c "import json; data=json.load(open('results.json')); print(sum(1 for r in data if not r['ok']))")
@@ -89,57 +73,50 @@ jobs:
           echo "working_links=$WORKING_LINKS" >> $GITHUB_OUTPUT
           echo "broken_links=$BROKEN_LINKS" >> $GITHUB_OUTPUT
 
-      # 6. Загружаем результаты как артефакт
       - name: Upload results as artifact
         uses: actions/upload-artifact@v4
         with:
           name: link-check-results
-          path: |
-            results.json
+          path: results.json
           retention-days: 7
+
+      - name: Create summary report
+        run: |
+          echo "## 📊 Отчёт проверки ссылок" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Проверяемый URL:** ${{ steps.params.outputs.TARGET_URL }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Статистика:**" >> $GITHUB_STEP_SUMMARY
+          echo "- Всего проверено ссылок: ${{ steps.checker.outputs.total_links }}" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Рабочих ссылок: ${{ steps.checker.outputs.working_links }}" >> $GITHUB_STEP_SUMMARY
+          echo "- ❌ Нерабочих ссылок: ${{ steps.checker.outputs.broken_links }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Подробные результаты** сохранены в [артефакте link-check-results](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $GITHUB_STEP_SUMMARY
           
-    # 7. Создаём сводный отчёт
-          - name: Create summary report
-            run: |
-              echo "## 📊 Отчёт проверки ссылок" >> $GITHUB_STEP_SUMMARY
-              echo "" >> $GITHUB_STEP_SUMMARY
-              echo "**Проверяемый URL:** ${{ steps.params.outputs.TARGET_URL }}" >> $GITHUB_STEP_SUMMARY
-              echo "" >> $GITHUB_STEP_SUMMARY
-              echo "**Статистика:**" >> $GITHUB_STEP_SUMMARY
-              echo "- Всего проверено ссылок: ${{ steps.checker.outputs.total_links }}" >> $GITHUB_STEP_SUMMARY
-              echo "- ✅ Рабочих ссылок: ${{ steps.checker.outputs.working_links }}" >> $GITHUB_STEP_SUMMARY
-              echo "- ❌ Нерабочих ссылок: ${{ steps.checker.outputs.broken_links }}" >> $GITHUB_STEP_SUMMARY
-              echo "" >> $GITHUB_STEP_SUMMARY
-              echo "**Подробные результаты** сохранены в [артефакте link-check-results](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $GITHUB_STEP_SUMMARY
-              
-              # Если есть нерабочие ссылки, показываем первые 5
-              if [ "${{ steps.checker.outputs.broken_links }}" -gt 0 ]; then
-                echo "" >> $GITHUB_STEP_SUMMARY
-                echo "**Примеры нерабочих ссылок:**" >> $GITHUB_STEP_SUMMARY
-                echo '```' >> $GITHUB_STEP_SUMMARY
-                
-                # ВАЖНО: heredoc должен начинаться без отступа
-                python << 'EOF'
-    import json
-    with open('results.json') as f:
-        data = json.load(f)
-    broken = [r for r in data if not r['ok']]
-    for i, r in enumerate(broken[:5]):
-        print(f'{i+1}. {r["url"]}')
-        print(f'   Статус: {r["status"] or "N/A"}, Ошибка: {r["reason"]}')
-    EOF
-                
-                echo '```' >> $GITHUB_STEP_SUMMARY
-              fi
-          
-      # 8. Отправляем уведомление (опционально)
+          if [ "${{ steps.checker.outputs.broken_links }}" -gt 0 ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**Примеры нерабочих ссылок:**" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            
+            python << 'EOF'
+import json
+with open('results.json') as f:
+    data = json.load(f)
+broken = [r for r in data if not r['ok']]
+for i, r in enumerate(broken[:5]):
+    print(f'{i+1}. {r["url"]}')
+    print(f'   Статус: {r["status"] or "N/A"}, Ошибка: {r["reason"]}')
+EOF
+            
+            echo '```' >> $GITHUB_STEP_SUMMARY
+          fi
+
       - name: Send notification on failure
         if: failure()
         run: |
           echo "❌ Workflow завершился с ошибкой!"
           echo "Подробности: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
-      # 9. (ОПЦИОНАЛЬНО) Автоматически создаём issue при обнаружении битых ссылок
       - name: Create GitHub Issue if broken links found
         if: steps.checker.outputs.broken_links > 0 && github.event_name == 'schedule'
         uses: actions/github-script@v7
@@ -149,12 +126,10 @@ jobs:
             const results = JSON.parse(fs.readFileSync('results.json', 'utf8'));
             const brokenLinks = results.filter(r => !r.ok);
             
-            // Формируем список битых ссылок
             const brokenList = brokenLinks.slice(0, 20).map(link => 
               `- ${link.url} (${link.status || 'ERROR'}: ${link.reason})`
             ).join('\n');
             
-            // Создаём issue
             await github.rest.issues.create({
               owner: context.repo.owner,
               repo: context.repo.repo,
