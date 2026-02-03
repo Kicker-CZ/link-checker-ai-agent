@@ -27,7 +27,7 @@ on:
 # Переменные по умолчанию (если не переданы вручную)
 env:
   DEFAULT_URL: "https:///www.google.com"
-  DEFAULT_MAX_LINKS: 50
+  DEFAULT_MAX_LINKS: 30
 
 jobs:
   check-links:
