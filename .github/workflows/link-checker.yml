@@ -97,40 +97,40 @@ jobs:
           path: |
             results.json
           retention-days: 7
-
-           # 7. Создаём сводный отчёт
-      - name: Create summary report
-        run: |
-          echo "## 📊 Отчёт проверки ссылок" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Проверяемый URL:** ${{ steps.params.outputs.TARGET_URL }}" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Статистика:**" >> $GITHUB_STEP_SUMMARY
-          echo "- Всего проверено ссылок: ${{ steps.checker.outputs.total_links }}" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ Рабочих ссылок: ${{ steps.checker.outputs.working_links }}" >> $GITHUB_STEP_SUMMARY
-          echo "- ❌ Нерабочих ссылок: ${{ steps.checker.outputs.broken_links }}" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Подробные результаты** сохранены в [артефакте link-check-results](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $GITHUB_STEP_SUMMARY
           
-          # Если есть нерабочие ссылки, показываем первые 5
-          if [ "${{ steps.checker.outputs.broken_links }}" -gt 0 ]; then
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "**Примеры нерабочих ссылок:**" >> $GITHUB_STEP_SUMMARY
-            echo '```' >> $GITHUB_STEP_SUMMARY
-            
-            # ВАЖНО: Вот исправленный блок Python кода
-            python << 'EOF'
-import json
-with open('results.json') as f:
-    data = json.load(f)
-broken = [r for r in data if not r['ok']]
-for i, r in enumerate(broken[:5]):
-    print(f'{i+1}. {r["url"]}')
-    print(f'   Статус: {r["status"] or "N/A"}, Ошибка: {r["reason"]}')
-EOF
-            
-            echo '```' >> $GITHUB_STEP_SUMMARY
-          fi
+    # 7. Создаём сводный отчёт
+          - name: Create summary report
+            run: |
+              echo "## 📊 Отчёт проверки ссылок" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "**Проверяемый URL:** ${{ steps.params.outputs.TARGET_URL }}" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "**Статистика:**" >> $GITHUB_STEP_SUMMARY
+              echo "- Всего проверено ссылок: ${{ steps.checker.outputs.total_links }}" >> $GITHUB_STEP_SUMMARY
+              echo "- ✅ Рабочих ссылок: ${{ steps.checker.outputs.working_links }}" >> $GITHUB_STEP_SUMMARY
+              echo "- ❌ Нерабочих ссылок: ${{ steps.checker.outputs.broken_links }}" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "**Подробные результаты** сохранены в [артефакте link-check-results](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $GITHUB_STEP_SUMMARY
+              
+              # Если есть нерабочие ссылки, показываем первые 5
+              if [ "${{ steps.checker.outputs.broken_links }}" -gt 0 ]; then
+                echo "" >> $GITHUB_STEP_SUMMARY
+                echo "**Примеры нерабочих ссылок:**" >> $GITHUB_STEP_SUMMARY
+                echo '```' >> $GITHUB_STEP_SUMMARY
+                
+                # ВАЖНО: heredoc должен начинаться без отступа
+                python << 'EOF'
+    import json
+    with open('results.json') as f:
+        data = json.load(f)
+    broken = [r for r in data if not r['ok']]
+    for i, r in enumerate(broken[:5]):
+        print(f'{i+1}. {r["url"]}')
+        print(f'   Статус: {r["status"] or "N/A"}, Ошибка: {r["reason"]}')
+    EOF
+                
+                echo '```' >> $GITHUB_STEP_SUMMARY
+              fi
           
       # 8. Отправляем уведомление (опционально)
       - name: Send notification on failure
