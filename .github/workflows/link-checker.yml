@@ -98,7 +98,7 @@ jobs:
             results.json
           retention-days: 7
 
-      # 7. Создаём сводный отчёт
+           # 7. Создаём сводный отчёт
       - name: Create summary report
         run: |
           echo "## 📊 Отчёт проверки ссылок" >> $GITHUB_STEP_SUMMARY
@@ -117,18 +117,21 @@ jobs:
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "**Примеры нерабочих ссылок:**" >> $GITHUB_STEP_SUMMARY
             echo '```' >> $GITHUB_STEP_SUMMARY
-            python -c "
+            
+            # ВАЖНО: Вот исправленный блок Python кода
+            python << 'EOF'
 import json
 with open('results.json') as f:
     data = json.load(f)
 broken = [r for r in data if not r['ok']]
 for i, r in enumerate(broken[:5]):
-    print(f'{i+1}. {r[\"url\"]}')
-    print(f'   Статус: {r[\"status\"] or \"N/A\"}, Ошибка: {r[\"reason\"]}')
-" >> $GITHUB_STEP_SUMMARY
+    print(f'{i+1}. {r["url"]}')
+    print(f'   Статус: {r["status"] or "N/A"}, Ошибка: {r["reason"]}')
+EOF
+            
             echo '```' >> $GITHUB_STEP_SUMMARY
           fi
-
+          
       # 8. Отправляем уведомление (опционально)
       - name: Send notification on failure
         if: failure()
